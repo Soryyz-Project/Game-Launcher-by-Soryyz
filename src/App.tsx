@@ -4,6 +4,7 @@ import { useGames } from "./hooks/useGames";
 import { PS5Intro } from "./components/PS5Intro";
 import { GamesLibrary } from "./components/GamesLibrary";
 import { MediaScreen } from "./components/MediaScreen";
+import { MediaViewer } from "./components/MediaViewer";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { ControllerIcons } from "./components/ControllerIcons";
 import type { Screen } from "./types";
@@ -16,6 +17,11 @@ const TOP_ITEMS: { id: Screen; label: string }[] = [
   { id: "games", label: "Игры" },
   { id: "media", label: "Медиа" },
   { id: "settings", label: "Настройки" },
+];
+
+const MEDIA_TABS: { id: "screenshots" | "videos"; label: string }[] = [
+  { id: "screenshots", label: "Скриншоты" },
+  { id: "videos", label: "Видео" },
 ];
 
 interface Section {
@@ -37,6 +43,8 @@ function App() {
   const [focusItem, setFocusItem] = useState(0);
   const [libFocus, setLibFocus] = useState(0);
   const [inputMode, setInputMode] = useState<InputMode>("mouse");
+  const [mediaTab, setMediaTab] = useState<"screenshots" | "videos" | null>(null);
+  const [barState, setBarState] = useState<"normal" | "hiding" | "media" | "showing">("normal");
   const { games, loading, launch } = useGames();
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -44,6 +52,8 @@ function App() {
   focusSecRef.current = focusSec;
   const libFocusRef = useRef(libFocus);
   libFocusRef.current = libFocus;
+  const mediaTabRef = useRef(mediaTab);
+  mediaTabRef.current = mediaTab;
 
   useEffect(() => {
     const onMouse = () => setInputMode("mouse");
@@ -55,12 +65,32 @@ function App() {
     };
   }, []);
 
+  const openMediaViewer = useCallback((tab: "screenshots" | "videos") => {
+    setBarState("hiding");
+    setTimeout(() => {
+      setMediaTab(tab);
+      setBarState("media");
+    }, 200);
+  }, []);
+
+  const closeMediaViewer = useCallback(() => {
+    setBarState("hiding");
+    setTimeout(() => {
+      setMediaTab(null);
+      setBarState("normal");
+    }, 200);
+  }, []);
+
   const handleGamepad = useCallback(
     (action: string) => {
       setInputMode("gamepad");
       if (showIntro) return;
       const cs = screenRef.current;
       const secs = getSections(games.length);
+
+      if (mediaTabRef.current) {
+        return;
+      }
 
       if (cs === "home") {
         switch (action) {
@@ -122,112 +152,112 @@ function App() {
             });
             return;
           case "confirm":
-            if (libFocusRef.current < games.length) {
-              launch(games[libFocusRef.current].path);
-            }
+            if (games[libFocusRef.current]) launch(games[libFocusRef.current].path);
             return;
         }
       }
 
       switch (action) {
-        case "lb": {
-          const idx = TOP_ITEMS.findIndex((t) => t.id === cs);
-          if (idx > 0) {
-            setScreen(TOP_ITEMS[idx - 1].id);
-            setFocusSec(0);
-            setFocusItem(0);
-            setLibFocus(0);
-          }
+        case "lb":
+          setScreen((s) => {
+            const idx = TOP_ITEMS.findIndex((t) => t.id === s);
+            const prev = Math.max(idx - 1, 0);
+            return TOP_ITEMS[prev].id;
+          });
           return;
-        }
-        case "rb": {
-          const idx = TOP_ITEMS.findIndex((t) => t.id === cs);
-          if (idx < TOP_ITEMS.length - 1) {
-            setScreen(TOP_ITEMS[idx + 1].id);
-            setFocusSec(0);
-            setFocusItem(0);
-            setLibFocus(0);
-          }
+        case "rb":
+          setScreen((s) => {
+            const idx = TOP_ITEMS.findIndex((t) => t.id === s);
+            const next = Math.min(idx + 1, TOP_ITEMS.length - 1);
+            return TOP_ITEMS[next].id;
+          });
           return;
-        }
-        case "back": {
-          if (cs !== "home") {
-            setScreen("home");
-            setFocusSec(0);
-            setFocusItem(0);
-            setLibFocus(0);
-          }
-          return;
-        }
       }
     },
-    [showIntro, focusItem, games, launch]
+    [showIntro, games.length, launch]
   );
 
-  const controllerType: ControllerType = useGamepad(handleGamepad);
-  const icons = ControllerIcons({ type: controllerType });
+  const controllerType = useGamepad(handleGamepad);
   const hasGamepad = controllerType !== "none";
-
-  useEffect(() => {
-    if (hasGamepad && inputMode === "mouse") {
-      setInputMode("gamepad");
-    }
-  }, [hasGamepad, inputMode]);
-
-  const showHints = inputMode === "gamepad" && hasGamepad;
   const showFocus = hasGamepad;
+  const showHints = hasGamepad && inputMode === "gamepad";
+
+  const icons = ControllerIcons({ type: controllerType });
   const visibleGames = games.slice(0, 6);
 
   return (
     <>
       {showIntro && <PS5Intro onFinish={() => setShowIntro(false)} />}
-
-      <div className="app" style={{ display: showIntro ? "none" : "flex" }}>
-        <div className="bg-overlay" />
-        <div className="bg-gradient" />
-
-        <header className="top-bar">
-          <div className="top-bar-inner">
-            <div className="top-bar-left">
-              <div className="ps-logo">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <circle cx="12" cy="12" r="10" fill="white" />
-                  <text x="12" y="16" textAnchor="middle" fontSize="11" fill="black" fontWeight="bold">PS</text>
-                </svg>
+      <div className={`app ${showIntro ? "hidden" : ""}`}>
+        <header className={`top-bar ${barState === "hiding" ? "bar-hiding" : barState === "media" || barState === "showing" ? "bar-media" : ""}`}>
+          {barState === "media" || barState === "showing" || barState === "hiding" ? (
+            <div className="top-bar-inner" style={{ justifyContent: "flex-start", gap: 16 }}>
+              <button className="top-bar-back" onClick={closeMediaViewer}>
+                <span className="back-arrow">←</span>
+                <span>Назад</span>
+              </button>
+              <div className="top-bar-media-tabs">
+                {MEDIA_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`top-bar-media-tab ${mediaTab === tab.id ? "active" : ""}`}
+                    onClick={() => setMediaTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-              <div className={`tab-hint tab-hint-left ${showHints ? "" : "hidden"}`}>
-                <icons.LbIcon />
+              {showHints && (
+                <div className="media-tab-hints">
+                  <span className="hint-lb">LB</span>
+                  <span className="hint-rb">RB</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="top-bar-inner">
+              <div className="top-bar-left">
+                <div className="ps-logo">
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                    <text x="11" y="16" textAnchor="middle" fill="white" fontSize="14" fontWeight="700" fontFamily="Arial">PS</text>
+                  </svg>
+                </div>
+                {showHints && (
+                  <div className={`tab-hint left ${screen === "home" ? "hidden" : ""}`}>
+                    <icons.LBIcon />
+                  </div>
+                )}
+                {TOP_ITEMS.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`top-btn ${screen === item.id ? "active" : ""} ${showFocus ? "focusable" : ""}`}
+                    onClick={() => setScreen(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                {showHints && (
+                  <div className={`tab-hint right ${screen === "settings" ? "hidden" : ""}`}>
+                    <icons.RBIcon />
+                  </div>
+                )}
               </div>
-              {TOP_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  className={`top-btn ${screen === item.id ? "active" : ""}`}
-                  onClick={() => { setScreen(item.id); setFocusSec(0); setFocusItem(0); setLibFocus(0); }}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <div className={`tab-hint tab-hint-right ${showHints ? "" : "hidden"}`}>
-                <icons.RbIcon />
+              <div className="top-bar-right">
+                <div className="controller-badge" style={{ fontSize: 18, opacity: 0.5 }}>
+                  {controllerType === "ps" ? "🎮" : controllerType === "xbox" ? "🎮" : controllerType === "none" ? "" : "🎮"}
+                </div>
+                <div className="time-display">
+                  {new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+                <div className="user-avatar">
+                  <svg width="28" height="28" viewBox="0 0 28 28">
+                    <circle cx="14" cy="14" r="13" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.15)" />
+                    <text x="14" y="18" textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize="12" fontWeight="600">U</text>
+                  </svg>
+                </div>
               </div>
             </div>
-            <div className="top-bar-right">
-              <div className="controller-indicator">
-                {controllerType === "ps" && <span className="ctrl-badge ps">PS</span>}
-                {controllerType === "xbox" && <span className="ctrl-badge xbox">Xbox</span>}
-                {controllerType === "generic" && <span className="ctrl-badge generic">🎮</span>}
-              </div>
-              <div className="time-display">
-                {new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-              </div>
-              <div className="user-avatar">
-                <svg width="28" height="28" viewBox="0 0 28 28">
-                  <circle cx="14" cy="14" r="13" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.15)" />
-                  <text x="14" y="18" textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize="12" fontWeight="600">U</text>
-                </svg>
-              </div>
-            </div>
-          </div>
+          )}
         </header>
 
         <main className="main-content">
@@ -286,7 +316,6 @@ function App() {
                   </div>
                 )}
               </section>
-
             </>
           )}
 
@@ -301,8 +330,20 @@ function App() {
             />
           )}
 
-          {screen === "media" && (
-            <MediaScreen games={games} onOpenLibrary={() => setScreen("games")} />
+          {screen === "media" && !mediaTab && (
+            <MediaScreen
+              games={games}
+              onOpenViewer={openMediaViewer}
+              onOpenLibrary={() => setScreen("games")}
+            />
+          )}
+
+          {screen === "media" && mediaTab && (
+            <MediaViewer
+              initialTab={mediaTab}
+              onBack={closeMediaViewer}
+              controller={controllerType}
+            />
           )}
 
           {screen === "settings" && (
@@ -310,7 +351,7 @@ function App() {
           )}
         </main>
 
-        {showHints && (
+        {showHints && !mediaTab && (
           <footer className="bottom-bar">
             <div className="bottom-bar-inner">
               <div className="bottom-hint">

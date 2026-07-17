@@ -1,5 +1,6 @@
 mod config;
 mod games;
+mod media;
 
 use config::ConfigState;
 use tauri::Manager;
@@ -73,6 +74,9 @@ pub fn run() {
             config::get_config,
             config::set_config,
             games::open_folder,
+            media::get_media_counts,
+            media::get_media_files,
+            media::delete_media_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

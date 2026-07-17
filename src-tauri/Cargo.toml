@@ -25,3 +25,4 @@ tauri = { version = "2.11.3", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 winreg = "0.52"
 chrono = "0.4"
+base64 = "0.22.1"
