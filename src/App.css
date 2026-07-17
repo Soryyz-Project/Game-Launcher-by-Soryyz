@@ -1259,6 +1259,14 @@ html, body, #root {
   display: block;
 }
 
+.preview-video {
+  max-width: 80vw;
+  max-height: 80vh;
+  border-radius: 4px;
+  display: block;
+  background: #000;
+}
+
 .preview-video-wrap {
   display: flex;
   flex-direction: column;
@@ -1276,7 +1284,17 @@ html, body, #root {
   font-size: 14px;
 }
 
-/* Confirm Dialog */
+/* Confirm Dialog Overlay */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .confirm-dialog {
   background: var(--bg-card);
   border: 1px solid var(--border);

@@ -12,14 +12,18 @@ interface Props {
   initialTab: "screenshots" | "videos";
   onBack: () => void;
   controller: string;
-  onTabChange?: (tab: "screenshots" | "videos") => void;
+  icons: {
+    ConfirmIcon: () => JSX.Element;
+    BackIcon: () => JSX.Element;
+    DpadNav: () => JSX.Element;
+  };
   showHints: boolean;
   onToggleHints: () => void;
 }
 
 const TABS = ["screenshots", "videos"] as const;
 
-function VideoThumbnail({ path, thumbnail }: { path: string; thumbnail: string | null }) {
+function VideoThumbnail({ path }: { path: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
@@ -29,12 +33,9 @@ function VideoThumbnail({ path, thumbnail }: { path: string; thumbnail: string |
     video.preload = "metadata";
     video.muted = true;
     video.crossOrigin = "anonymous";
-
-    const src = convertFileSrc(path);
-    video.src = src;
+    try { video.src = convertFileSrc(path); } catch { return; }
 
     let done = false;
-
     const capture = () => {
       if (done || !mountedRef.current) return;
       done = true;
@@ -42,8 +43,7 @@ function VideoThumbnail({ path, thumbnail }: { path: string; thumbnail: string |
         const canvas = document.createElement("canvas");
         canvas.width = video.videoWidth || 320;
         canvas.height = video.videoHeight || 180;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
         setDataUrl(canvas.toDataURL("image/jpeg", 0.4));
       } catch {}
       video.remove();
@@ -52,7 +52,6 @@ function VideoThumbnail({ path, thumbnail }: { path: string; thumbnail: string |
     video.onloadeddata = () => { video.currentTime = 0.5; };
     video.onseeked = capture;
     video.onerror = capture;
-
     setTimeout(() => { if (!done) capture(); }, 2000);
 
     return () => { mountedRef.current = false; video.remove(); };
@@ -62,7 +61,7 @@ function VideoThumbnail({ path, thumbnail }: { path: string; thumbnail: string |
   return <div className="media-viewer-video-thumb"><span>🎥</span></div>;
 }
 
-export function MediaViewer({ initialTab, onBack, controller, onTabChange, showHints, onToggleHints }: Props) {
+export function MediaViewer({ initialTab, onBack, controller, icons, showHints, onToggleHints }: Props) {
   const [tabIdx, setTabIdx] = useState(initialTab === "videos" ? 1 : 0);
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
@@ -70,41 +69,36 @@ export function MediaViewer({ initialTab, onBack, controller, onTabChange, showH
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const cacheRef = useRef<Record<string, MediaFile[]>>({});
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    setTabIdx(initialTab === "videos" ? 1 : 0);
-  }, [initialTab]);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  useEffect(() => { setTabIdx(initialTab === "videos" ? 1 : 0); }, [initialTab]);
 
   const load = useCallback((idx: number) => {
     const key = TABS[idx];
-    if (cacheRef.current[key]) {
-      setFiles(cacheRef.current[key]);
-      return;
-    }
+    if (cacheRef.current[key]) { setFiles(cacheRef.current[key]); return; }
     invoke<MediaFile[]>("get_media_files", { dirType: key })
       .then((res) => {
-        if (mountedRef.current) {
-          cacheRef.current[key] = res;
-          setFiles(res);
-        }
+        if (!mountedRef.current) return;
+        cacheRef.current[key] = res;
+        setFiles(res);
+        if (selected === null && res.length > 0) setSelected(0);
       })
       .catch(() => {});
-  }, []);
+  }, [selected]);
 
   useEffect(() => { load(tabIdx); }, [tabIdx, load]);
+
+  useEffect(() => {
+    if (files.length > 0 && selected === null) setSelected(0);
+  }, [files, selected]);
 
   const switchTab = useCallback((idx: number) => {
     if (idx === tabIdx) return;
     setTabIdx(idx);
-    setSelected(null);
     setPreview(null);
-    onTabChange?.(TABS[idx]);
-  }, [tabIdx, onTabChange]);
+    setConfirmDelete(null);
+  }, [tabIdx]);
 
   const del = useCallback(async (path: string) => {
     try {
@@ -112,7 +106,6 @@ export function MediaViewer({ initialTab, onBack, controller, onTabChange, showH
       const key = TABS[tabIdx];
       cacheRef.current[key] = (cacheRef.current[key] || []).filter((f) => f.path !== path);
       setFiles(cacheRef.current[key]);
-      setSelected(null);
       setConfirmDelete(null);
     } catch {}
   }, [tabIdx]);
@@ -129,7 +122,7 @@ export function MediaViewer({ initialTab, onBack, controller, onTabChange, showH
         return;
       }
       if (e.key === "Escape" || e.key === "Backspace") { onBack(); }
-      if (e.key === "Delete" && selected !== null && files[selected]) { setConfirmDelete(files[selected].path); }
+      if (e.key === "Delete" && selected !== null && files[selected]) setConfirmDelete(files[selected].path);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -141,30 +134,23 @@ export function MediaViewer({ initialTab, onBack, controller, onTabChange, showH
       if (confirmDelete) {
         if (action === "back") setConfirmDelete(null);
         else if (action === "delete") setConfirmDelete(null);
-        else if (action === "confirm" && confirmDelete) del(confirmDelete);
+        else if (action === "confirm") del(confirmDelete);
         return;
       }
       if (preview) {
-        if (action === "back" || action === "confirm") setPreview(null);
-        else if (action === "delete" && preview) setConfirmDelete(preview.path);
+        if (action === "back") setPreview(null);
+        else if (action === "delete") setConfirmDelete(preview.path);
+        else if (action === "confirm") setPreview(null);
         return;
       }
       switch (action) {
         case "back": onBack(); break;
-        case "left":
-          setSelected((i) => (i === null || i <= 0 ? null : i - 1)); break;
-        case "right":
-          setSelected((i) =>
-            i === null ? (files.length > 0 ? 0 : null) : Math.min(i + 1, files.length - 1)
-          ); break;
-        case "up":
-          if (selected !== null) setSelected(Math.max(selected - 4, 0)); break;
-        case "down":
-          if (selected !== null) setSelected(Math.min(selected + 4, files.length - 1)); break;
-        case "confirm":
-          if (selected !== null && files[selected]) setPreview(files[selected]); break;
-        case "delete":
-          if (selected !== null && files[selected]) setConfirmDelete(files[selected].path); break;
+        case "left": setSelected((i) => (i === null || i <= 0 ? 0 : i - 1)); break;
+        case "right": setSelected((i) => i === null ? 0 : Math.min(i + 1, files.length - 1)); break;
+        case "up": setSelected((i) => (i === null || i < 4) ? 0 : i - 4); break;
+        case "down": setSelected((i) => i === null ? 0 : Math.min(i + 4, files.length - 1)); break;
+        case "confirm": if (selected !== null && files[selected]) setPreview(files[selected]); break;
+        case "delete": if (selected !== null && files[selected]) setConfirmDelete(files[selected].path); break;
         case "lb": switchTab(tabIdx === 0 ? 0 : tabIdx - 1); break;
         case "rb": switchTab(tabIdx === TABS.length - 1 ? tabIdx : tabIdx + 1); break;
         case "toggle_hints": onToggleHints(); break;
@@ -213,63 +199,26 @@ export function MediaViewer({ initialTab, onBack, controller, onTabChange, showH
     return () => clearInterval(poll);
   }, [handleGamepadAction]);
 
-  if (confirmDelete) {
-    return (
-      <div className="preview-overlay">
-        <div className="confirm-dialog">
-          <div className="confirm-title">Вы уверены?</div>
-          <div className="confirm-actions">
-            <button className="confirm-btn confirm-no" onClick={() => setConfirmDelete(null)}>
-              Нет
-            </button>
-            <button className="confirm-btn confirm-yes" onClick={() => del(confirmDelete)}>
-              Да
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (preview) {
-    return (
-      <div className="preview-overlay" onClick={() => setPreview(null)}>
-        <div className="preview-frame">
-          {preview.is_image && preview.thumbnail ? (
-            <img className="preview-image" src={preview.thumbnail} alt={preview.name} onClick={(e) => e.stopPropagation()} />
-          ) : (
-            <div className="preview-video-wrap" onClick={(e) => e.stopPropagation()}>
-              <span className="preview-video-icon">🎥</span>
-              <span className="preview-filename">{preview.name}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const currentFiles = files;
-
   return (
-    <div className="media-viewer">
-      {currentFiles.length === 0 ? (
+    <div className="media-viewer" style={{ position: "relative" }}>
+      {files.length === 0 ? (
         <div className="media-viewer-empty">
           <p>Нет файлов</p>
           <p className="empty-hint">Добавьте {tabIdx === 0 ? "изображения" : "видео"} в папку</p>
         </div>
       ) : (
         <div className="media-viewer-grid">
-          {currentFiles.map((file, i) => (
+          {files.map((file, i) => (
             <div
               key={file.path}
               className={`media-viewer-item ${selected === i ? "selected" : ""}`}
-              onClick={() => setSelected(i)}
+              onClick={() => { setSelected(i); }}
               onDoubleClick={() => setPreview(file)}
             >
               {file.is_image && file.thumbnail ? (
                 <img className="media-viewer-thumb" src={file.thumbnail} alt={file.name} />
               ) : (
-                <VideoThumbnail path={file.path} thumbnail={file.thumbnail} />
+                <VideoThumbnail path={file.path} />
               )}
               <span className="media-viewer-name">{file.name}</span>
               {selected === i && (
@@ -280,30 +229,59 @@ export function MediaViewer({ initialTab, onBack, controller, onTabChange, showH
         </div>
       )}
 
+      {/* Preview overlay */}
+      {preview && (
+        <div className="preview-overlay" onClick={() => setPreview(null)}>
+          <div className="preview-frame" onClick={(e) => e.stopPropagation()}>
+            {preview.is_image && preview.thumbnail ? (
+              <img className="preview-image" src={preview.thumbnail} alt={preview.name} />
+            ) : (
+              <video
+                ref={videoRef}
+                className="preview-video"
+                src={convertFileSrc(preview.path)}
+                controls
+                autoPlay
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm dialog overlay */}
+      {confirmDelete && (
+        <div className="confirm-overlay" onClick={() => setConfirmDelete(null)}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-title">Вы уверены?</div>
+            <div className="confirm-actions">
+              <button className="confirm-btn confirm-no" onClick={() => setConfirmDelete(null)}>Нет</button>
+              <button className="confirm-btn confirm-yes" onClick={() => del(confirmDelete)}>Да</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer className={`bottom-bar ${showHints ? "visible" : ""}`}>
         <div className="bottom-bar-inner" style={{ justifyContent: "center", gap: 40 }}>
+          <div className="bottom-hint"><icons.ConfirmIcon /> <span>Открыть</span></div>
+          <div className="bottom-hint"><icons.BackIcon /> <span>Назад</span></div>
           <div className="bottom-hint">
-            <span className="hint-icon">{(controller === "ps" ? "✕" : controller === "xbox" ? "A" : "Enter")}</span>
-            <span>Открыть</span>
-          </div>
-          <div className="bottom-hint">
-            <span className="hint-icon">{(controller === "ps" ? "○" : controller === "xbox" ? "B" : "Esc")}</span>
-            <span>Назад</span>
-          </div>
-          <div className="bottom-hint">
-            <span className="hint-icon">{(controller === "ps" ? "□" : controller === "xbox" ? "X" : "Del")}</span>
+            {controller === "xbox"
+              ? <img src="/icons/XBOX_iconpack/button_xbox_digital_x_1.svg" style={{ width: 20, height: 20, opacity: 0.5, display: "block" }} draggable={false} />
+              : <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.5 }}>□</span>}
             <span>Удалить</span>
           </div>
           <div className="bottom-hint">
-            <span className="hint-icon">{(controller === "ps" ? "△" : controller === "xbox" ? "Y" : "Y")}</span>
+            {controller === "xbox"
+              ? <img src="/icons/XBOX_iconpack/button_xbox_digital_y_1.svg" style={{ width: 20, height: 20, opacity: 0.5, display: "block" }} draggable={false} />
+              : <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.5 }}>△</span>}
             <span>Скрыть</span>
           </div>
-          <div className="bottom-hint">
-            <span className="hint-icon">◆</span>
-            <span>Навигация</span>
-          </div>
+          <div className="bottom-hint"><icons.DpadNav /> <span>Навигация</span></div>
         </div>
       </footer>
     </div>
   );
 }
+
+
