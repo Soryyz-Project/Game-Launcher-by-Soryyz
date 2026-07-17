@@ -195,6 +195,7 @@ function App() {
               <button className="top-bar-back" onClick={closeMediaViewer}>
                 <span className="back-arrow">←</span>
                 <span>Назад</span>
+                <span className="back-hint">{controllerType === "ps" ? "○" : controllerType === "xbox" ? "B" : "Esc"}</span>
               </button>
               <div className="top-bar-media-tabs">
                 {MEDIA_TABS.map((tab) => (
@@ -343,6 +344,7 @@ function App() {
               initialTab={mediaTab}
               onBack={closeMediaViewer}
               controller={controllerType}
+              onTabChange={setMediaTab}
             />
           )}
 

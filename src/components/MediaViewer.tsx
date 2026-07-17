@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ControllerType } from "../hooks/useGamepad";
 
@@ -13,25 +13,36 @@ interface Props {
   initialTab: "screenshots" | "videos";
   onBack: () => void;
   controller: ControllerType;
+  onTabChange?: (tab: "screenshots" | "videos") => void;
 }
 
-export function MediaViewer({ initialTab, onBack, controller }: Props) {
-  const [tab, setTab] = useState(initialTab === "videos" ? 1 : 0);
+const TABS = ["screenshots", "videos"] as const;
+
+export function MediaViewer({ initialTab, onBack, controller, onTabChange }: Props) {
+  const [tabIdx, setTabIdx] = useState(initialTab === "videos" ? 1 : 0);
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [preview, setPreview] = useState<MediaFile | null>(null);
-
-  const tabs = ["screenshots", "videos"] as const;
-
-  const load = useCallback(() => {
-    invoke<MediaFile[]>("get_media_files", { dirType: tabs[tab] })
-      .then(setFiles)
-      .catch(() => {});
-  }, [tab]);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const load = useCallback(() => {
+    invoke<MediaFile[]>("get_media_files", { dirType: TABS[tabIdx] })
+      .then((res) => { if (mountedRef.current) setFiles(res); })
+      .catch(() => {});
+  }, [tabIdx]);
+
+  const switchTab = useCallback((idx: number) => {
+    setTabIdx(idx);
+    setSelected(null);
+    if (onTabChange) onTabChange(TABS[idx]);
+  }, [onTabChange]);
+
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -53,6 +64,7 @@ export function MediaViewer({ initialTab, onBack, controller }: Props) {
 
   const handleGamepadAction = useCallback(
     (action: string) => {
+      if (!mountedRef.current) return;
       if (preview) {
         if (action === "back" || action === "confirm") {
           setPreview(null);
@@ -89,16 +101,14 @@ export function MediaViewer({ initialTab, onBack, controller }: Props) {
           }
           break;
         case "lb":
-          setTab((t) => (t === 0 ? 0 : t - 1));
-          setSelected(null);
+          switchTab(tabIdx === 0 ? 0 : tabIdx - 1);
           break;
         case "rb":
-          setTab((t) => (t === tabs.length - 1 ? t : t + 1));
-          setSelected(null);
+          switchTab(tabIdx === TABS.length - 1 ? tabIdx : tabIdx + 1);
           break;
       }
     },
-    [onBack, files, selected, preview]
+    [onBack, files, selected, preview, tabIdx, switchTab]
   );
 
   useEffect(() => {
@@ -106,87 +116,60 @@ export function MediaViewer({ initialTab, onBack, controller }: Props) {
       const gp = navigator.getGamepads();
       const gamepad = Array.from(gp).find((g) => g !== null);
       if (!gamepad) return;
-      for (const cb of buttonCallbacks.current) cb(gamepad);
+      for (const cb of callbacks.current) cb(gamepad);
     }, 80);
-    const buttonCallbacks: { current: ((gp: Gamepad) => void)[] } = { current: [] };
-    const prevButtons = new Map<string, number>();
+    const callbacks: { current: ((gp: Gamepad) => void)[] } = { current: [] };
+    const prev = new Map<string, number>();
     const check = (gp: Gamepad) => {
-      const btnMap: [string, number, string][] = [
-        ["confirm", 0, "lb"],
-        ["back", 1, "rb"],
-        ["lb", 4, "lb"],
-        ["rb", 5, "rb"],
+      const btnMap: [string, number][] = [
+        ["confirm", 0], ["back", 1], ["lb", 4], ["rb", 5],
       ];
       for (const [action, idx] of btnMap) {
         const pressed = gp.buttons[idx]?.pressed ?? false;
-        const key = `${action}-${gp.index}`;
-        const prev = prevButtons.get(key) ?? 0;
-        if (pressed && prev === 0) {
-          handleGamepadAction(action);
-          prevButtons.set(key, 1);
-        } else if (!pressed) {
-          prevButtons.set(key, 0);
-        }
+        const k = `${action}-${gp.index}`;
+        const p = prev.get(k) ?? 0;
+        if (pressed && p === 0) { handleGamepadAction(action); prev.set(k, 1); }
+        else if (!pressed) { prev.set(k, 0); }
       }
-      // DPad
       const ax = gp.axes;
-      const dpadActions: [number, number, string][] = [
-        [0, -0.5, "left"],
-        [0, 0.5, "right"],
-        [1, -0.5, "up"],
-        [1, 0.5, "down"],
+      const dpad: [number, number, string][] = [
+        [0, -0.5, "left"], [0, 0.5, "right"], [1, -0.5, "up"], [1, 0.5, "down"],
       ];
-      for (const [axis, threshold, action] of dpadActions) {
+      for (const [axis, threshold, action] of dpad) {
         const val = ax[axis] ?? 0;
-        const key = `axis-${axis}-${gp.index}`;
-        const prev = prevButtons.get(key) ?? 0;
-        if ((axis === 0 || axis === 1) && Math.abs(val) > Math.abs(threshold)) {
-          const dir = val < 0 ? "negative" : "positive";
-          const dirKey = `${key}-${dir}`;
-          const p = prevButtons.get(dirKey) ?? 0;
-          if (p === 0) {
-            handleGamepadAction(action);
-            prevButtons.set(dirKey, 1);
-          }
+        if (Math.abs(val) > Math.abs(threshold)) {
+          const dir = val < 0 ? "neg" : "pos";
+          const dk = `${axis}-${dir}`;
+          const p = prev.get(dk) ?? 0;
+          if (p === 0) { handleGamepadAction(action); prev.set(dk, 1); }
         } else {
-          prevButtons.set(`${key}-negative`, 0);
-          prevButtons.set(`${key}-positive`, 0);
+          [0, 1].forEach((a) => { prev.delete(`${a}-neg`); prev.delete(`${a}-pos`); });
         }
       }
     };
-    buttonCallbacks.current.push(check);
+    callbacks.current.push(check);
     return () => clearInterval(poll);
   }, [handleGamepadAction]);
 
   const del = async (path: string) => {
     try {
       await invoke("delete_media_file", { path });
-      load();
-      setSelected(null);
+      if (mountedRef.current) { load(); setSelected(null); }
     } catch {}
   };
 
-  const currentFiles = files;
+  const backHint = controller === "ps" ? "○" : controller === "xbox" ? "B" : "Esc";
 
   if (preview) {
     return (
       <div className="media-preview-overlay" onClick={() => setPreview(null)}>
         <div className="media-preview-toolbar">
-          <button className="media-preview-btn" onClick={() => setPreview(null)}>
-            ✕
-          </button>
+          <button className="media-preview-btn" onClick={() => setPreview(null)}>✕</button>
           <span className="media-preview-name">{preview.name}</span>
-          <button className="media-preview-btn danger" onClick={() => { del(preview.path); setPreview(null); }}>
-            🗑
-          </button>
+          <button className="media-preview-btn danger" onClick={() => { del(preview.path); setPreview(null); }}>🗑</button>
         </div>
         {preview.is_image && preview.thumbnail ? (
-          <img
-            className="media-preview-image"
-            src={preview.thumbnail}
-            alt={preview.name}
-            onClick={(e) => e.stopPropagation()}
-          />
+          <img className="media-preview-image" src={preview.thumbnail} alt={preview.name} onClick={(e) => e.stopPropagation()} />
         ) : (
           <div className="media-preview-video-placeholder" onClick={(e) => e.stopPropagation()}>
             <span className="media-preview-video-icon">🎥</span>
@@ -199,16 +182,14 @@ export function MediaViewer({ initialTab, onBack, controller }: Props) {
 
   return (
     <div className="media-viewer">
-      {currentFiles.length === 0 ? (
+      {files.length === 0 ? (
         <div className="media-viewer-empty">
           <p>Нет файлов</p>
-          <p className="empty-hint">
-            Добавьте {tab === 0 ? "изображения" : "видео"} в папку
-          </p>
+          <p className="empty-hint">Добавьте {tabIdx === 0 ? "изображения" : "видео"} в папку</p>
         </div>
       ) : (
         <div className="media-viewer-grid">
-          {currentFiles.map((file, i) => (
+          {files.map((file, i) => (
             <div
               key={file.path}
               className={`media-viewer-item ${selected === i ? "selected" : ""}`}
@@ -216,24 +197,13 @@ export function MediaViewer({ initialTab, onBack, controller }: Props) {
               onDoubleClick={() => setPreview(file)}
             >
               {file.is_image && file.thumbnail ? (
-                <img
-                  className="media-viewer-thumb"
-                  src={file.thumbnail}
-                  alt={file.name}
-                />
+                <img className="media-viewer-thumb" src={file.thumbnail} alt={file.name} />
               ) : (
-                <div className="media-viewer-video-thumb">
-                  <span>🎥</span>
-                </div>
+                <div className="media-viewer-video-thumb"><span>🎥</span></div>
               )}
               <span className="media-viewer-name">{file.name}</span>
               {selected === i && (
-                <button
-                  className="media-viewer-del"
-                  onClick={(e) => { e.stopPropagation(); del(file.path); }}
-                >
-                  🗑
-                </button>
+                <button className="media-viewer-del" onClick={(e) => { e.stopPropagation(); del(file.path); }}>🗑</button>
               )}
             </div>
           ))}

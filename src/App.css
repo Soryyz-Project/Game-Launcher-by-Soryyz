@@ -1065,13 +1065,42 @@ html, body, #root {
   font-family: var(--font);
 }
 
+.top-bar-media-tab {
+  position: relative;
+}
+
+.top-bar-media-tab::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  transition: width 0.2s;
+}
+
 .top-bar-media-tab.active {
-  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
+}
+
+.top-bar-media-tab.active::after {
+  width: 60%;
 }
 
 .top-bar-media-tab:hover {
   color: var(--text-primary);
+}
+
+.back-hint {
+  font-size: 10px;
+  opacity: 0.4;
+  background: rgba(255,255,255,0.08);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 2px;
 }
 
 .media-tab-hints {
