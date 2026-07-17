@@ -7,6 +7,7 @@ pub struct AppConfig {
     pub game_paths: Vec<String>,
     pub auto_launch: bool,
     pub minimize_to_tray: bool,
+    pub hints_visible: bool,
 }
 
 impl Default for AppConfig {
@@ -15,6 +16,7 @@ impl Default for AppConfig {
             game_paths: Vec::new(),
             auto_launch: false,
             minimize_to_tray: true,
+            hints_visible: true,
         }
     }
 }

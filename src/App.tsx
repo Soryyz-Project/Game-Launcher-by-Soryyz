@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useGamepad, type ControllerType } from "./hooks/useGamepad";
 import { useGames } from "./hooks/useGames";
 import { PS5Intro } from "./components/PS5Intro";
@@ -46,7 +47,14 @@ function App() {
   const [inputMode, setInputMode] = useState<InputMode>("mouse");
   const [mediaTab, setMediaTab] = useState<"screenshots" | "videos" | null>(null);
   const [barState, setBarState] = useState<"normal" | "hiding" | "media" | "showing">("normal");
+  const [hintsVisible, setHintsVisible] = useState(true);
   const { games, loading, launch } = useGames();
+
+  useEffect(() => {
+    invoke<{ hints_visible: boolean }>("get_config").then((cfg) => {
+      if (cfg.hints_visible !== undefined) setHintsVisible(cfg.hints_visible);
+    }).catch(() => {});
+  }, []);
   const screenRef = useRef(screen);
   screenRef.current = screen;
   const focusSecRef = useRef(focusSec);
@@ -55,6 +63,12 @@ function App() {
   libFocusRef.current = libFocus;
   const mediaTabRef = useRef(mediaTab);
   mediaTabRef.current = mediaTab;
+
+  useEffect(() => {
+    invoke("get_config").then((cfg: any) => {
+      invoke("set_config", { config: { ...cfg, hints_visible: hintsVisible } });
+    }).catch(() => {});
+  }, [hintsVisible]);
 
   useEffect(() => {
     const onMouse = () => setInputMode("mouse");
@@ -177,6 +191,9 @@ function App() {
             return TOP_ITEMS[next].id;
           });
           return;
+        case "toggle_hints":
+          setHintsVisible((v) => !v);
+          return;
       }
       } catch (e) { console.error("gamepad handler error:", e); }
     },
@@ -186,7 +203,7 @@ function App() {
   const controllerType = useGamepad(handleGamepad);
   const hasGamepad = controllerType !== "none";
   const showFocus = hasGamepad;
-  const showHints = hasGamepad && inputMode === "gamepad";
+  const showHints = hasGamepad && inputMode === "gamepad" && hintsVisible;
 
   const icons = ControllerIcons({ type: controllerType });
   const visibleGames = games.slice(0, 6);
@@ -201,7 +218,6 @@ function App() {
               <button className="top-bar-back" onClick={closeMediaViewer}>
                 <span className="back-arrow">←</span>
                 <span>Назад</span>
-                <span className="back-hint">{controllerType === "ps" ? "○" : controllerType === "xbox" ? "B" : "Esc"}</span>
               </button>
               <div className="top-bar-media-tabs">
                 {MEDIA_TABS.map((tab) => (
@@ -250,8 +266,16 @@ function App() {
                 )}
               </div>
               <div className="top-bar-right">
-                <div className="controller-badge" style={{ fontSize: 18, opacity: 0.5 }}>
-                  {controllerType === "ps" ? "🎮" : controllerType === "xbox" ? "🎮" : controllerType === "none" ? "" : "🎮"}
+                <div className="controller-badge" style={{ width: 22, height: 22, opacity: 0.5 }}>
+                  <img
+                    src={controllerType === "ps"
+                      ? "/icons/PS_iconpack/Button - PS Home 2.svg"
+                      : controllerType === "xbox"
+                        ? "/icons/XBOX_iconpack/button_xbox_digital_home_white.svg"
+                        : ""}
+                    alt=""
+                    style={{ width: 22, height: 22, display: controllerType === "none" ? "none" : "block" }}
+                  />
                 </div>
                 <div className="time-display">
                   {new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}

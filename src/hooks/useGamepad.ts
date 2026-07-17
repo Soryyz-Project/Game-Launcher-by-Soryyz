@@ -6,7 +6,8 @@ export type GamepadAction =
   | "up" | "down" | "left" | "right"
   | "confirm" | "back"
   | "lb" | "rb"
-  | "start" | "select";
+  | "start" | "select"
+  | "toggle_hints";
 
 type GamepadCallback = (action: GamepadAction) => void;
 
@@ -41,6 +42,7 @@ export function useGamepad(callback: GamepadCallback) {
 
     if (b[0]?.pressed) return "confirm";   // A / Cross
     if (b[1]?.pressed) return "back";      // B / Circle
+    if (b[3]?.pressed) return "toggle_hints"; // Y / Triangle
     if (b[4]?.pressed) return "lb";
     if (b[5]?.pressed) return "rb";
     if (b[8]?.pressed) return "select";
