@@ -24,5 +24,7 @@ dist-ssr
 *.sw?
 
 # Large video backgrounds (keep locally)
-public/bg/*.mp4
-public/bg/*.mov
+public/bg/S2.mp4
+public/bg/S5.mp4
+public/bg/S6.mp4
+
