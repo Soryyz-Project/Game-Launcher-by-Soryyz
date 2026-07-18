@@ -17,11 +17,11 @@
 
 ## Скриншоты
 
-| Главный экран | Библиотека игр |
+| Экран загрузки | Главный экран |
 |:---:|:---:|
-| ![Главный](screenshots/Screen1.png) | ![Библиотека](screenshots/Screen2.png) |
-| **Медиа** | **Настройки** |
-| ![Медиа](screenshots/Screen3.png) | ![Настройки](screenshots/Screen4.png) |
+| ![Загрузка](screenshots/Screen1.png) | ![Главный](screenshots/Screen2.png) |
+| **Библиотека** | **Настройки** |
+| ![Библиотека](screenshots/Screen3.png) | ![Настройки](screenshots/Screen4.png) |
 
 ## Технологии
 
