@@ -8,7 +8,10 @@ export type GamepadAction =
   | "confirm" | "back" | "delete" | "search"
   | "lb" | "rb"
   | "start" | "select"
-  | "toggle_hints";
+  | "toggle_hints"
+  | "toggle_fav"
+  | "open_kb"
+  | "cycle_sort";
 
 type GamepadCallback = (action: GamepadAction) => void;
 
@@ -47,6 +50,12 @@ function vibrateForAction(gamepad: Gamepad, action: GamepadAction) {
       break;
     case "toggle_hints":
       vibrate(gamepad, 50, 0.75, 0.75);
+      break;
+    case "toggle_fav":
+      vibrate(gamepad, 50, 0.5, 0.5);
+      break;
+    case "cycle_sort":
+      vibrate(gamepad, 50, 0.6, 0.6);
       break;
   }
 }

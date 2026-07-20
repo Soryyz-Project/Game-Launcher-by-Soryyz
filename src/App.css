@@ -947,6 +947,15 @@ html, body, #root {
   color: var(--text-primary);
 }
 
+.sort-trigger {
+  min-width: 130px;
+  text-align: left;
+}
+
+.library-controls .custom-select-dropdown {
+  right: 0;
+}
+
 .settings-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -1061,36 +1070,6 @@ html, body, #root {
 }
 
 /* Language Selector */
-.lang-selector {
-  display: flex;
-  gap: 6px;
-}
-
-.lang-btn {
-  background: rgb(26 26 36 / var(--panel-alpha, 0.85));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  font-family: var(--font);
-  transition: all 0.2s;
-}
-
-.lang-btn:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
-.lang-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
 /* Reset Settings */
 .settings-reset-btn {
   background: rgba(255, 50, 50, 0.1);

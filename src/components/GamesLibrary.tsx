@@ -14,15 +14,24 @@ interface Props {
   libColsRef?: React.MutableRefObject<number>;
   favorites: Set<string>;
   onToggleFav: (path: string) => void;
+  gamepadHandlerRef?: React.MutableRefObject<((action: string) => boolean) | null>;
 }
 
-export function GamesLibrary({ games, loading, onLaunch, focusIndex, onFocusChange, showFocus, searchInputRef, libColsRef, favorites, onToggleFav }: Props) {
+const SORT_OPTIONS: { value: SortMode; labelKey: string }[] = [
+  { value: "name", labelKey: "sort_name" },
+  { value: "source", labelKey: "sort_source" },
+  { value: "recent", labelKey: "sort_recent" },
+];
+
+export function GamesLibrary({ games, loading, onLaunch, focusIndex, onFocusChange, showFocus, searchInputRef, libColsRef, favorites, onToggleFav, gamepadHandlerRef }: Props) {
   const { t, plural } = useLocale();
   const gridRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(4);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("name");
   const [showKb, setShowKb] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = gridRef.current;
@@ -39,7 +48,31 @@ export function GamesLibrary({ games, loading, onLaunch, focusIndex, onFocusChan
     return () => obs.disconnect();
   }, [games]);
 
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setSortOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   useEffect(() => { if (libColsRef) libColsRef.current = cols; }, [cols, libColsRef]);
+
+  useEffect(() => {
+    if (gamepadHandlerRef) {
+      gamepadHandlerRef.current = (action: string) => {
+        if (action === "cycle_sort") {
+          setSortMode((prev) => {
+            const idx = SORT_OPTIONS.findIndex((o) => o.value === prev);
+            return SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length].value;
+          });
+          return true;
+        }
+        return false;
+      };
+      return () => { if (gamepadHandlerRef) gamepadHandlerRef.current = null; };
+    }
+  }, [gamepadHandlerRef]);
 
   const sorted = useMemo(() => {
     let list = [...games];
@@ -53,8 +86,13 @@ export function GamesLibrary({ games, loading, onLaunch, focusIndex, onFocusChan
       case "recent":
         break;
     }
+    list.sort((a, b) => {
+      const af = favorites.has(a.path) ? 0 : 1;
+      const bf = favorites.has(b.path) ? 0 : 1;
+      return af - bf;
+    });
     return list;
-  }, [games, sortMode]);
+  }, [games, sortMode, favorites]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -90,15 +128,28 @@ export function GamesLibrary({ games, loading, onLaunch, focusIndex, onFocusChan
             {query && (
               <button className="search-clear" onClick={() => setQuery("")}>✕</button>
             )}
-            <button className="vk-toggle" onClick={() => setShowKb((v) => !v)} title="Virtual keyboard">
+            <button className="vk-toggle" onClick={() => setShowKb((v) => !v)}>
               ⌨️
             </button>
           </div>
-          <select className="sort-select" value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)}>
-            <option value="name">{t("sort_name")}</option>
-            <option value="source">{t("sort_source")}</option>
-            <option value="recent">{t("sort_recent")}</option>
-          </select>
+          <div className="custom-select-wrapper" ref={sortRef}>
+            <button className="custom-select sort-trigger" onClick={() => setSortOpen((v) => !v)}>
+              {t(SORT_OPTIONS.find((o) => o.value === sortMode)?.labelKey || "sort_name")} ▾
+            </button>
+            {sortOpen && (
+              <div className="custom-select-dropdown">
+                {SORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    className={`custom-select-option ${sortMode === opt.value ? "active" : ""}`}
+                    onClick={() => { setSortMode(opt.value); setSortOpen(false); }}
+                  >
+                    {t(opt.labelKey)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -119,7 +170,6 @@ export function GamesLibrary({ games, loading, onLaunch, focusIndex, onFocusChan
               <button
                 className="fav-btn"
                 onClick={(e) => { e.stopPropagation(); onToggleFav(game.path); }}
-                title={isFav ? "Remove from favorites" : "Add to favorites"}
               >
                 {isFav ? "★" : "☆"}
               </button>

@@ -32,8 +32,11 @@ interface Section {
   cols: number;
 }
 
-function getSections(gamesCount: number): Section[] {
+function getSections(gamesCount: number, favCount: number): Section[] {
   const sections: Section[] = [{ id: "hero", cols: 2 }];
+  if (favCount > 0) {
+    sections.push({ id: "favorites", cols: Math.min(favCount, 6) });
+  }
   if (gamesCount > 0) {
     sections.push({ id: "games", cols: Math.min(gamesCount, 6) });
   }
@@ -102,7 +105,8 @@ function App() {
       if (cfg.recent_games) setRecentGames(cfg.recent_games);
       if (cfg.controller_theme) setControllerTheme(cfg.controller_theme);
     } catch {}
-  }, []);
+    loadFavorites();
+  }, [loadFavorites]);
 
   const refreshAll = useCallback(async () => {
     await refresh();
@@ -138,6 +142,7 @@ function App() {
   mediaTabRef.current = mediaTab;
   const searchInputRef = useRef<HTMLInputElement>(null);
   const libColsRef = useRef(4);
+  const libGamepadHandlerRef = useRef<((action: string) => boolean) | null>(null);
 
   useEffect(() => {
     invoke("get_config").then((cfg: any) => {
@@ -204,7 +209,7 @@ function App() {
       setInputMode("gamepad");
       if (!action) return;
       const cs = screenRef.current;
-      const secs = getSections(games.length);
+      const secs = getSections(games.length, favorites.size);
 
       if (mediaTabRef.current) {
         return;
@@ -243,8 +248,11 @@ function App() {
             if (sec.id === "hero") {
               if (focusItem === 0 && games.length > 0) handleLaunch(games[0].path);
               if (focusItem === 1) changeScreen("games");
-            } else if (sec.id === "games" && focusItem >= 0 && focusItem < games.length) {
-              handleLaunch(games[focusItem].path);
+            } else if (sec.id === "favorites") {
+              const favGames = games.filter(g => favorites.has(g.path));
+              if (focusItem >= 0 && focusItem < favGames.length) handleLaunch(favGames[focusItem].path);
+            } else if (sec.id === "games" && focusItem >= 0 && focusItem < visibleGames.length) {
+              handleLaunch(visibleGames[focusItem].path);
             }
             return;
           }
@@ -252,6 +260,7 @@ function App() {
       }
 
       if (cs === "games") {
+        if (libGamepadHandlerRef.current?.(action)) return;
         switch (action) {
           case "left":
             setLibFocus((i) => Math.max(i - 1, 0));
@@ -277,6 +286,15 @@ function App() {
           case "search":
             searchInputRef.current?.focus();
             return;
+          case "toggle_fav": {
+            const idx = libFocusRef.current;
+            if (games[idx]) toggleFav(games[idx].path);
+            return;
+          }
+          case "open_kb": {
+            searchInputRef.current?.focus();
+            return;
+          }
         }
       }
 
@@ -328,7 +346,7 @@ function App() {
       }
       } catch (e) { console.error("gamepad handler error:", e); }
     },
-    [games.length, handleLaunch]
+    [games.length, games, favorites.size, favorites, visibleGames, handleLaunch, toggleFav]
   );
 
   const [controllerTheme, setControllerTheme] = useState("ps");
@@ -521,6 +539,7 @@ function App() {
               libColsRef={libColsRef}
               favorites={favorites}
               onToggleFav={toggleFav}
+              gamepadHandlerRef={libGamepadHandlerRef}
             />
           )}
 

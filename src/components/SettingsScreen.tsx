@@ -98,7 +98,7 @@ export function SettingsScreen({
   const { t } = useLocale();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saved, setSaved] = useState(false);
-  const [selectOpen, setSelectOpen] = useState(false);
+  const [selectOpen, setSelectOpen] = useState<string | null>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [colorPos, setColorPos] = useState({ top: 0, left: 0 });
@@ -209,7 +209,8 @@ export function SettingsScreen({
   useEffect(() => {
     if (selectOpen) {
       const handler = (e: MouseEvent) => {
-        if (selectRef.current && !selectRef.current.contains(e.target as Node)) setSelectOpen(false);
+        const t = e.target as Node;
+        if (selectRef.current && !selectRef.current.contains(t)) setSelectOpen(null);
       };
       document.addEventListener("mousedown", handler);
       return () => document.removeEventListener("mousedown", handler);
@@ -271,14 +272,14 @@ export function SettingsScreen({
           <div className="settings-row">
             <span>{t("start_screen")}</span>
             <div className="custom-select-wrap" ref={selectRef}>
-              <button className="custom-select" onClick={() => setSelectOpen((v) => !v)}>
+              <button className="custom-select" onClick={() => setSelectOpen((v) => v === "start" ? null : "start")}>
                 <span>{t(START_OPTIONS.find((o) => o.value === config.start_screen)?.label || "home")}</span>
                 <span className="custom-select-arrow">▾</span>
               </button>
-              {selectOpen && (
+              {selectOpen === "start" && (
                 <div className="custom-select-dropdown">
                   {START_OPTIONS.map((o) => (
-                    <button key={o.value} className={`custom-select-option ${config.start_screen === o.value ? "active" : ""}`} onClick={() => { update({ start_screen: o.value }); setSelectOpen(false); }}>
+                    <button key={o.value} className={`custom-select-option ${config.start_screen === o.value ? "active" : ""}`} onClick={() => { update({ start_screen: o.value }); setSelectOpen(null); }}>
                       {t(o.label)}
                     </button>
                   ))}
@@ -373,26 +374,42 @@ export function SettingsScreen({
           <h3 className="settings-section-title">{t("language")}</h3>
           <div className="settings-row">
             <span>{t("language")}</span>
-            <div className="lang-selector">
-              {(Object.keys(langNames) as Lang[]).map((l) => (
-                <button
-                  key={l}
-                  className={`lang-btn ${lang === l ? "active" : ""}`}
-                  onClick={() => { onLangChange(l); update({ language: l }); }}
-                >
-                  {langNames[l]}
-                </button>
-              ))}
+            <div className="custom-select-wrap">
+              <button className="custom-select" onClick={() => setSelectOpen((v) => v === "lang" ? null : "lang")}>
+                <span>{langNames[lang]}</span>
+                <span className="custom-select-arrow">▾</span>
+              </button>
+              {selectOpen === "lang" && (
+                <div className="custom-select-dropdown">
+                  {(Object.keys(langNames) as Lang[]).map((l) => (
+                    <button
+                      key={l}
+                      className={`custom-select-option ${lang === l ? "active" : ""}`}
+                      onClick={() => { onLangChange(l); update({ language: l }); setSelectOpen(null); }}
+                    >
+                      {langNames[l]}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="settings-row">
             <span>{t("controller_theme")}</span>
-            <div className="lang-selector">
-              {(["ps", "xbox"] as const).map((v) => (
-                <button key={v} className={`lang-btn ${controllerTheme === v ? "active" : ""}`} onClick={() => { onControllerThemeChange(v); update({ controller_theme: v }); }}>
-                  {t("controller_" + v)}
-                </button>
-              ))}
+            <div className="custom-select-wrap">
+              <button className="custom-select" onClick={() => setSelectOpen((v) => v === "theme" ? null : "theme")}>
+                <span>{t("controller_" + controllerTheme)}</span>
+                <span className="custom-select-arrow">▾</span>
+              </button>
+              {selectOpen === "theme" && (
+                <div className="custom-select-dropdown">
+                  {(["ps", "xbox"] as const).map((v) => (
+                    <button key={v} className={`custom-select-option ${controllerTheme === v ? "active" : ""}`} onClick={() => { onControllerThemeChange(v); update({ controller_theme: v }); setSelectOpen(null); }}>
+                      {t("controller_" + v)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </section>
